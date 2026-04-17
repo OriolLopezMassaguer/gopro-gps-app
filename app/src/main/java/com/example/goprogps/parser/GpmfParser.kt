@@ -117,8 +117,8 @@ object GpmfParser {
             val minf = findBox(read, mdia.first, mdia.second, "minf") ?: return@firstOrNull false
             val stbl = findBox(read, minf.first, minf.second, "stbl") ?: return@firstOrNull false
             val stsd = findBox(read, stbl.first, stbl.second, "stsd") ?: return@firstOrNull false
-            // stsd: 4 ver/flags + 4 count, then first entry 4-byte size + 4-byte codec
-            runCatching { String(read(stsd.first + 8, 4)) == "gpmd" }.getOrDefault(false)
+            // stsd: 4 ver/flags + 4 count + 4 entry-size, then 4-byte codec at offset 12
+            runCatching { String(read(stsd.first + 12, 4)) == "gpmd" }.getOrDefault(false)
         } ?: run {
             Log.e(TAG, "Box parser: no GPMD (GoPro metadata) track found among ${traks.size} tracks")
             return null
