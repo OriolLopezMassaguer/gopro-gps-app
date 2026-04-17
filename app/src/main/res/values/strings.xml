@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">GoProGPS</string>
+    <string name="scan_videos">Scan GoPro Videos</string>
+    <string name="pick_file">Pick File</string>
+    <string name="no_videos_found">No GoPro videos found.\nTap "Scan GoPro Videos" or use "Pick File" to select a video manually.</string>
+    <string name="export_gpx">Export as GPX</string>
+</resources>

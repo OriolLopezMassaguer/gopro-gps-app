@@ -1,0 +1,3 @@
+-dontwarn org.osmdroid.**
+-dontwarn com.github.mikephil.**
+-keep class org.osmdroid.** { *; }
