@@ -2,6 +2,7 @@ package com.example.goprogps
 
 import android.content.ContentResolver
 import android.net.Uri
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.goprogps.model.GpsTrack
@@ -13,6 +14,10 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 class TrackViewModel : ViewModel() {
+
+    private companion object {
+        const val TAG = "TrackViewModel"
+    }
 
     sealed class State {
         object Idle : State()
@@ -32,9 +37,14 @@ class TrackViewModel : ViewModel() {
                     val track = contentResolver.openFileDescriptor(uri, "r")?.use { pfd ->
                         GpmfParser.parse(pfd.fileDescriptor)
                     }
-                    if (track != null && track.points.isNotEmpty()) State.Success(track)
-                    else State.Error("No GPS data found in this video.\nMake sure GPS was enabled during recording.")
+                    if (track != null && track.points.isNotEmpty()) {
+                        State.Success(track)
+                    } else {
+                        Log.e(TAG, "Parser returned null or empty track for $uri")
+                        State.Error("No GPS data found in this video.\nMake sure GPS was enabled during recording.")
+                    }
                 } catch (e: Exception) {
+                    Log.e(TAG, "Exception while loading track from $uri", e)
                     State.Error(e.message ?: "Failed to read video file.")
                 }
             }

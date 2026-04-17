@@ -4,7 +4,20 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
+    <!-- Location pin body -->
     <path
         android:fillColor="#FFFFFF"
-        android:pathData="M54,30 C40,30 29,41 29,55 C29,69 40,80 54,80 C68,80 79,69 79,55 C79,41 68,30 54,30 Z M54,72 C44,72 37,65 37,55 C37,45 44,38 54,38 C64,38 71,45 71,55 C71,65 64,72 54,72 Z" />
+        android:pathData="M54,22 C70,22 82,34 82,50 C82,64 70,76 58,82 L54,90 L50,82 C38,76 26,64 26,50 C26,34 38,22 54,22 Z" />
+    <!-- Camera lens ring (dark, creates hole effect) -->
+    <path
+        android:fillColor="#0D47A1"
+        android:pathData="M42,50 A12,12,0,1,0,66,50 A12,12,0,1,0,42,50 Z" />
+    <!-- Inner lens (white ring) -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M47,50 A7,7,0,1,0,61,50 A7,7,0,1,0,47,50 Z" />
+    <!-- Center dot -->
+    <path
+        android:fillColor="#0D47A1"
+        android:pathData="M51,50 A3,3,0,1,0,57,50 A3,3,0,1,0,51,50 Z" />
 </vector>

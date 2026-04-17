@@ -4,6 +4,7 @@ import android.media.MediaExtractor
 import android.media.MediaFormat
 import android.system.Os
 import android.system.OsConstants
+import android.util.Log
 import com.example.goprogps.model.GpsPoint
 import com.example.goprogps.model.GpsTrack
 import java.io.FileDescriptor
@@ -13,20 +14,32 @@ import java.nio.ByteOrder
 
 object GpmfParser {
 
+    private const val TAG = "GpmfParser"
+
     fun parse(fd: FileDescriptor): GpsTrack? {
-        return runCatching { parseViaExtractor(fd) }.getOrNull()
-            ?: runCatching { parseViaBoxes { offset, size -> readFd(fd, offset, size) } }.getOrNull()
+        val extractorResult = runCatching { parseViaExtractor(fd) }
+        extractorResult.exceptionOrNull()?.let { Log.e(TAG, "MediaExtractor strategy failed", it) }
+        extractorResult.getOrNull()?.let { return it }
+
+        val boxResult = runCatching { parseViaBoxes { offset, size -> readFd(fd, offset, size) } }
+        boxResult.exceptionOrNull()?.let { Log.e(TAG, "Box parser strategy failed", it) }
+        return boxResult.getOrNull()
     }
 
     fun parse(path: String): GpsTrack? {
-        return runCatching { parseViaExtractorPath(path) }.getOrNull()
-            ?: runCatching {
-                RandomAccessFile(path, "r").use { raf ->
-                    parseViaBoxes { offset, size ->
-                        raf.seek(offset); ByteArray(size).also { raf.readFully(it) }
-                    }
+        val extractorResult = runCatching { parseViaExtractorPath(path) }
+        extractorResult.exceptionOrNull()?.let { Log.e(TAG, "MediaExtractor strategy failed for path", it) }
+        extractorResult.getOrNull()?.let { return it }
+
+        val boxResult = runCatching {
+            RandomAccessFile(path, "r").use { raf ->
+                parseViaBoxes { offset, size ->
+                    raf.seek(offset); ByteArray(size).also { raf.readFully(it) }
                 }
-            }.getOrNull()
+            }
+        }
+        boxResult.exceptionOrNull()?.let { Log.e(TAG, "Box parser strategy failed for path", it) }
+        return boxResult.getOrNull()
     }
 
     // ── MediaExtractor path ──────────────────────────────────────────────────
@@ -52,7 +65,10 @@ object GpmfParser {
     private fun extractAndParse(ex: MediaExtractor): GpsTrack? {
         val idx = (0 until ex.trackCount).firstOrNull { i ->
             ex.getTrackFormat(i).getString(MediaFormat.KEY_MIME) == "application/octet-stream"
-        } ?: return null
+        } ?: run {
+            Log.e(TAG, "No GPMF track (application/octet-stream) found among ${ex.trackCount} tracks")
+            return null
+        }
         ex.selectTrack(idx)
 
         val bufSize = ex.getTrackFormat(idx)
@@ -71,7 +87,13 @@ object GpmfParser {
             parseGpmfChunk(chunk, timeMs, points)
             ex.advance()
         }
-        return if (points.isNotEmpty()) GpsTrack(points) else null
+        return if (points.isNotEmpty()) {
+            Log.d(TAG, "MediaExtractor: extracted ${points.size} GPS points")
+            GpsTrack(points)
+        } else {
+            Log.e(TAG, "GPMF track found but no GPS5 data extracted")
+            null
+        }
     }
 
     // ── Direct MP4 box parser fallback ───────────────────────────────────────
@@ -83,8 +105,12 @@ object GpmfParser {
             Long.MAX_VALUE / 2
         }
 
-        val moov = findBox(read, 0L, fileSize, "moov") ?: return null
+        val moov = findBox(read, 0L, fileSize, "moov") ?: run {
+            Log.e(TAG, "Box parser: moov box not found — not a valid MP4?")
+            return null
+        }
         val traks = findAllBoxes(read, moov.first, moov.second, "trak")
+        Log.d(TAG, "Box parser: found ${traks.size} trak boxes")
 
         val gpmdTrak = traks.firstOrNull { trak ->
             val mdia = findBox(read, trak.first, trak.second, "mdia") ?: return@firstOrNull false
@@ -93,7 +119,10 @@ object GpmfParser {
             val stsd = findBox(read, stbl.first, stbl.second, "stsd") ?: return@firstOrNull false
             // stsd: 4 ver/flags + 4 count, then first entry 4-byte size + 4-byte codec
             runCatching { String(read(stsd.first + 8, 4)) == "gpmd" }.getOrDefault(false)
-        } ?: return null
+        } ?: run {
+            Log.e(TAG, "Box parser: no GPMD (GoPro metadata) track found among ${traks.size} tracks")
+            return null
+        }
 
         val mdia = findBox(read, gpmdTrak.first, gpmdTrak.second, "mdia")!!
         val minf = findBox(read, mdia.first, mdia.second, "minf")!!
@@ -101,7 +130,10 @@ object GpmfParser {
 
         val chunkOffsets = readChunkOffsets(read, stbl)
         val sampleSizes = readSampleSizes(read, stbl)
-        if (chunkOffsets.isEmpty() || sampleSizes.isEmpty()) return null
+        if (chunkOffsets.isEmpty() || sampleSizes.isEmpty()) {
+            Log.e(TAG, "Box parser: missing chunk offsets (${chunkOffsets.size}) or sample sizes (${sampleSizes.size})")
+            return null
+        }
 
         val sampleOffsets = resolveSampleOffsets(read, stbl, chunkOffsets, sampleSizes)
 
@@ -112,7 +144,13 @@ object GpmfParser {
                 parseGpmfChunk(read(offset, size), i * 1000L, points)
             }
         }
-        return if (points.isNotEmpty()) GpsTrack(points) else null
+        return if (points.isNotEmpty()) {
+            Log.d(TAG, "Box parser: extracted ${points.size} GPS points from ${sampleOffsets.size} samples")
+            GpsTrack(points)
+        } else {
+            Log.e(TAG, "Box parser: ${sampleOffsets.size} samples parsed but no valid GPS5 data found")
+            null
+        }
     }
 
     private fun findBox(
